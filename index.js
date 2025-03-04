@@ -2,12 +2,14 @@ const express = require('express');
 const ExcelJS = require('exceljs');
 const bodyParser = require('body-parser');
 const fs = require('fs');
+const cors = require("cors");
 
 const app = express();
 const port = 3000;
 const excelFilePath = './users.xlsx';
 
 app.use(bodyParser.json());
+app.use(cors());
 
 // Initialize Excel file with headers if it doesn't exist
 async function initializeExcelFile() {
