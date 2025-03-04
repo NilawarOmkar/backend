@@ -9,7 +9,11 @@ const port = 3000;
 const excelFilePath = './users.xlsx';
 
 app.use(bodyParser.json());
-app.use(cors());
+app.use(cors({
+    origin: "*",
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    allowedHeaders: ["Content-Type", "Authorization"]
+}));
 
 // Initialize Excel file with headers if it doesn't exist
 async function initializeExcelFile() {
