@@ -5,8 +5,9 @@ const fs = require('fs');
 const cors = require("cors");
 
 const app = express();
-const port = 3000;
+const port = 3001;
 const excelFilePath = './users.xlsx';
+const productRoutes = require('./routes/productRoutes');
 
 app.use(bodyParser.json());
 app.use(cors({
@@ -14,8 +15,9 @@ app.use(cors({
     methods: ["GET", "POST", "PUT", "DELETE"],
     allowedHeaders: ["Content-Type", "Authorization"]
 }));
+app.use('/products', productRoutes);
 
-// Initialize Excel file with headers if it doesn't exist
+
 async function initializeExcelFile() {
     if (!fs.existsSync(excelFilePath)) {
         const workbook = new ExcelJS.Workbook();
@@ -25,19 +27,16 @@ async function initializeExcelFile() {
     }
 }
 
-// Start server after initialization
 initializeExcelFile().then(() => {
     app.listen(port, () => {
         console.log(`Server running on http://localhost:${port}`);
     });
 });
 
-// Add new user
 app.post('/users', async (req, res) => {
     try {
         const userData = req.body;
 
-        // Validate required fields
         if (!userData.screen_0_First_0 || !userData.screen_0_Last_1 ||
             !userData.screen_0_Email_2 || !userData.flow_token) {
             return res.status(400).send('All fields are required');
@@ -47,7 +46,6 @@ app.post('/users', async (req, res) => {
         await workbook.xlsx.readFile(excelFilePath);
         const worksheet = workbook.getWorksheet('Users');
 
-        // Check for existing user
         let userExists = false;
         for (let rowNumber = 2; rowNumber <= worksheet.rowCount; rowNumber++) {
             const row = worksheet.getRow(rowNumber);
@@ -61,7 +59,6 @@ app.post('/users', async (req, res) => {
             return res.status(400).send('User already exists');
         }
 
-        // Add new row
         worksheet.addRow([
             userData.screen_0_First_0,
             userData.screen_0_Last_1,
