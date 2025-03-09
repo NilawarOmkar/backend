@@ -3,11 +3,13 @@ const ExcelJS = require('exceljs');
 const bodyParser = require('body-parser');
 const fs = require('fs');
 const cors = require("cors");
+const pool = require('./db');
 
 const app = express();
 const port = 3000;
 const excelFilePath = './users.xlsx';
 const productRoutes = require('./routes/productRoutes');
+const rabbitmqRoutes = require('./routes/rabbitmq');
 
 app.use(bodyParser.json());
 app.use(cors({
@@ -16,6 +18,7 @@ app.use(cors({
     allowedHeaders: ["Content-Type", "Authorization"]
 }));
 app.use('/products', productRoutes);
+app.use('/rabbitmq', rabbitmqRoutes);
 
 
 async function initializeExcelFile() {
@@ -35,92 +38,43 @@ initializeExcelFile().then(() => {
 
 app.post('/users', async (req, res) => {
     try {
-        const userData = req.body;
+        const { screen_0_First_0, screen_0_Last_1, screen_0_Email_2, flow_token } = req.body;
 
-        if (!userData.screen_0_First_0 || !userData.screen_0_Last_1 ||
-            !userData.screen_0_Email_2 || !userData.flow_token) {
+        if (!screen_0_First_0 || !screen_0_Last_1 || !screen_0_Email_2 || !flow_token) {
             return res.status(400).send('All fields are required');
         }
 
-        const workbook = new ExcelJS.Workbook();
-        await workbook.xlsx.readFile(excelFilePath);
-        const worksheet = workbook.getWorksheet('Users');
+        const query = `INSERT INTO users (first_name, last_name, email, phone_number) VALUES ($1, $2, $3, $4) RETURNING *;`;
+        const values = [screen_0_First_0, screen_0_Last_1, screen_0_Email_2, flow_token];
 
-        let userExists = false;
-        for (let rowNumber = 2; rowNumber <= worksheet.rowCount; rowNumber++) {
-            const row = worksheet.getRow(rowNumber);
-            if (row.getCell(4).value === userData.flow_token) {
-                userExists = true;
-                break;
-            }
-        }
-
-        if (userExists) {
-            return res.status(400).send('User already exists');
-        }
-
-        worksheet.addRow([
-            userData.screen_0_First_0,
-            userData.screen_0_Last_1,
-            userData.screen_0_Email_2,
-            userData.flow_token
-        ]);
-
-        await workbook.xlsx.writeFile(excelFilePath);
-        res.status(201).send('User added successfully');
+        const { rows } = await pool.query(query, values);
+        res.status(201).json(rows[0]);
     } catch (error) {
         res.status(500).send(error.message);
     }
 });
+
 
 // Get user by flow_token
 app.get('/users/:flowToken', async (req, res) => {
     try {
         const flowToken = req.params.flowToken;
-        const workbook = new ExcelJS.Workbook();
-        await workbook.xlsx.readFile(excelFilePath);
-        const worksheet = workbook.getWorksheet('Users');
+        const query = `SELECT * FROM users WHERE phone_number = $1;`;
+        const { rows } = await pool.query(query, [flowToken]);
 
-        let user = null;
-        for (let rowNumber = 2; rowNumber <= worksheet.rowCount; rowNumber++) {
-            const row = worksheet.getRow(rowNumber);
-            if (row.getCell(4).value === flowToken) {
-                user = {
-                    screen_0_First_0: row.getCell(1).value,
-                    screen_0_Last_1: row.getCell(2).value,
-                    screen_0_Email_2: row.getCell(3).value,
-                    flow_token: row.getCell(4).value
-                };
-                break;
-            }
-        }
-
-        user ? res.status(200).json(user) : res.status(404).send('User not found');
+        rows.length > 0 ? res.status(200).json(rows[0]) : res.status(404).send('User not found');
     } catch (error) {
         res.status(500).send(error.message);
     }
 });
 
+
 // Get all users
 app.get('/users', async (req, res) => {
     try {
-        const workbook = new ExcelJS.Workbook();
-        await workbook.xlsx.readFile(excelFilePath);
-        const worksheet = workbook.getWorksheet('Users');
-
-        const users = [];
-        for (let rowNumber = 2; rowNumber <= worksheet.rowCount; rowNumber++) {
-            const row = worksheet.getRow(rowNumber);
-            const user = {
-                screen_0_First_0: row.getCell(1).value,
-                screen_0_Last_1: row.getCell(2).value,
-                screen_0_Email_2: row.getCell(3).value,
-                flow_token: row.getCell(4).value
-            };
-            users.push(user);
-        }
-
-        res.status(200).json(users);
+        const query = `SELECT * FROM users;`;
+        const { rows } = await pool.query(query);
+        res.status(200).json(rows);
     } catch (error) {
         res.status(500).send(error.message);
     }
@@ -130,24 +84,10 @@ app.get('/users', async (req, res) => {
 app.delete('/users/:flowToken', async (req, res) => {
     try {
         const flowToken = req.params.flowToken;
-        const workbook = new ExcelJS.Workbook();
-        await workbook.xlsx.readFile(excelFilePath);
-        const worksheet = workbook.getWorksheet('Users');
+        const query = `DELETE FROM users WHERE phone_number = $1 RETURNING *;`;
+        const { rows } = await pool.query(query, [flowToken]);
 
-        let rowToDelete = null;
-        for (let rowNumber = 2; rowNumber <= worksheet.rowCount; rowNumber++) {
-            const row = worksheet.getRow(rowNumber);
-            if (row.getCell(4).value === flowToken) {
-                rowToDelete = rowNumber;
-                break;
-            }
-        }
-
-        if (!rowToDelete) return res.status(404).send('User not found');
-
-        worksheet.spliceRows(rowToDelete, 1);
-        await workbook.xlsx.writeFile(excelFilePath);
-        res.status(200).send('User deleted successfully');
+        rows.length > 0 ? res.status(200).send('User deleted successfully') : res.status(404).send('User not found');
     } catch (error) {
         res.status(500).send(error.message);
     }
