@@ -22,13 +22,20 @@ connectRabbitMQ();
 
 async function storeInPostgres(jsonData) {
     try {
-        const query = 'INSERT INTO messages (data) VALUES ($1)';
-        await pool.query(query, [jsonData]);
+        const query = `
+            INSERT INTO messages (data, phone_number) 
+            VALUES ($1, $2);
+        `;
+
+        const phone_number = jsonData.phone_number || null;
+
+        await pool.query(query, [jsonData, phone_number]);
         console.log('Stored in PostgreSQL:', jsonData);
     } catch (error) {
         console.error('Error storing data in PostgreSQL:', error);
     }
 }
+
 
 router.post('/send', async (req, res) => {
     try {
