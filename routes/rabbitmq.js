@@ -36,6 +36,26 @@ async function storeInPostgres(jsonData) {
     }
 }
 
+router.get('/messages/:flow_id', async (req, res) => {
+    try {
+        const { flow_id } = req.params;
+
+        const query = `
+            SELECT * FROM messages WHERE flow_id = $1;
+        `;
+
+        const { rows } = await pool.query(query, [flow_id]);
+
+        if (rows.length === 0) {
+            return res.status(404).json({ message: "No messages found for the given flow_id" });
+        }
+
+        res.json(rows);
+    } catch (error) {
+        console.error('Error retrieving messages:', error);
+        res.status(500).json({ error: 'Failed to retrieve messages' });
+    }
+});
 
 router.post('/send', async (req, res) => {
     try {

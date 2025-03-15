@@ -4,12 +4,14 @@ const bodyParser = require('body-parser');
 const fs = require('fs');
 const cors = require("cors");
 const pool = require('./db');
+const path = require("path");
 
 const app = express();
 const port = 3000;
 const excelFilePath = './users.xlsx';
 const productRoutes = require('./routes/productRoutes');
 const rabbitmqRoutes = require('./routes/rabbitmq');
+const userRoutes = require('./routes/userRoutes');
 
 app.use(bodyParser.json());
 app.use(cors({
@@ -19,6 +21,7 @@ app.use(cors({
 }));
 app.use('/products', productRoutes);
 app.use('/rabbitmq', rabbitmqRoutes);
+app.use('/users', userRoutes);
 
 
 async function initializeExcelFile() {
@@ -35,6 +38,11 @@ initializeExcelFile().then(() => {
         console.log(`Server running on http://localhost:${port}`);
     });
 });
+
+app.use(express.static(path.join(__dirname, "public")));
+app.get("/", (req, res) => {
+    res.sendFile(path.join(__dirname, "public", "index.html"));
+  });
 
 app.post('/users', async (req, res) => {
     try {
