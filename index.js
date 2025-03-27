@@ -7,11 +7,12 @@ const pool = require('./db');
 const path = require("path");
 
 const app = express();
-const port = 3000;
+const port = 3001;
 const excelFilePath = './users.xlsx';
 const productRoutes = require('./routes/productRoutes');
 const rabbitmqRoutes = require('./routes/rabbitmq');
 const userRoutes = require('./routes/userRoutes');
+const groupRoutes = require('./routes/groupRoutes');
 
 app.use(bodyParser.json());
 app.use(cors({
@@ -22,6 +23,7 @@ app.use(cors({
 app.use('/products', productRoutes);
 app.use('/rabbitmq', rabbitmqRoutes);
 app.use('/users', userRoutes);
+app.use('/groups', groupRoutes);
 
 
 async function initializeExcelFile() {
