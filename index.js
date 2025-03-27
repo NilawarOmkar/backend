@@ -7,7 +7,7 @@ const pool = require('./db');
 const path = require("path");
 
 const app = express();
-const port = 3001;
+const port = 3000;
 const excelFilePath = './users.xlsx';
 const productRoutes = require('./routes/productRoutes');
 const rabbitmqRoutes = require('./routes/rabbitmq');
