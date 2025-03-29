@@ -3,15 +3,16 @@ const amqp = require('amqplib');
 const pool = require('../db')
 const router = express.Router();
 const RABBITMQ_URL = 'amqp://localhost';
-const QUEUE_NAME = 'jsonQueue';
+let connection;
 let channel;
 
 async function connectRabbitMQ() {
     try {
-        const connection = await amqp.connect(RABBITMQ_URL);
+        connection = await amqp.connect(RABBITMQ_URL);
         channel = await connection.createChannel();
-        await channel.assertQueue(QUEUE_NAME, { durable: true });
+        await channel.assertQueue("jsonQueue", { durable: true });
         await channel.assertQueue("messages", { durable: true });
+        consumeMessages();
         console.log('✅ Connected to RabbitMQ and queue is ready.');
 
     } catch (error) {
@@ -31,7 +32,6 @@ async function storeInPostgres(jsonData) {
         const phone_number = jsonData.phone_number || null;
 
         await pool.query(query, [jsonData, phone_number]);
-        console.log('Stored in PostgreSQL:', jsonData);
     } catch (error) {
         console.error('Error storing data in PostgreSQL:', error);
     }
@@ -45,7 +45,6 @@ async function storeReplyInPostgres(jsonData) {
         `;
 
         await pool.query(query, [jsonData]);
-        console.log('Stored in PostgreSQL:', jsonData);
     } catch (error) {
         console.error('Error storing data in PostgreSQL:', error);
     }
@@ -75,13 +74,11 @@ router.get('/messages/:flow_id', async (req, res) => {
 router.post('/send', async (req, res) => {
     try {
         const jsonData = req.body;
-        console.log("Attempting to store ", jsonData)
         if (!channel) {
             return res.status(500).json({ error: 'RabbitMQ not connected' });
         }
 
         channel.sendToQueue(QUEUE_NAME, Buffer.from(JSON.stringify(jsonData)), { persistent: true });
-        console.log('Message sent to RabbitMQ:', jsonData);
         res.json({ success: true, message: 'Data sent to RabbitMQ' });
     } catch (error) {
         console.error('Error:', error);
@@ -92,12 +89,10 @@ router.post('/send', async (req, res) => {
 router.post('/replies', async (req, res) => {
     try {
         const jsonData = req.body;
-        console.log("Attempting to store ", jsonData)
         if (!channel) {
             return res.status(500).json({ error: 'RabbitMQ not connected' });
         }
         channel.sendToQueue("messages", Buffer.from(JSON.stringify(jsonData)), { persistent: true });
-        console.log('Message sent to RabbitMQ:', jsonData);
         res.json({ success: true, message: 'Data sent to RabbitMQ' });
     } catch (error) {
         console.error('Error:', error);
@@ -112,7 +107,6 @@ router.get('/replies', async (req, res) => {
         `;
 
         const result = await pool.query(query);
-        console.log("Messages: ", result.rows);
         res.json(result.rows);
     } catch (error) {
         console.error('Error fetching messages:', error);
@@ -122,13 +116,9 @@ router.get('/replies', async (req, res) => {
 
 async function consumeMessages() {
     try {
-        const connection = await amqp.connect(RABBITMQ_URL);
-        const channel = await connection.createChannel();
-        await channel.assertQueue(QUEUE_NAME, { durable: true });
-
         console.log('Waiting for messages...');
 
-        channel.consume(QUEUE_NAME, async (msg) => {
+        channel.consume("jsonQueue", async (msg) => {
             if (msg !== null) {
                 const jsonData = JSON.parse(msg.content.toString());
                 console.log('Received message:', jsonData);
@@ -156,9 +146,5 @@ async function consumeMessages() {
         console.error('Error consuming messages:', error);
     }
 }
-
-consumeMessages();
-
-
 
 module.exports = router;
