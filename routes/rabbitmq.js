@@ -5,7 +5,6 @@ const router = express.Router();
 const RABBITMQ_URL = 'amqp://localhost';
 const QUEUE_NAME = 'jsonQueue';
 let channel;
-const messages = [];
 
 async function connectRabbitMQ() {
     try {
@@ -13,20 +12,10 @@ async function connectRabbitMQ() {
         channel = await connection.createChannel();
         await channel.assertQueue(QUEUE_NAME, { durable: true });
         await channel.assertQueue("messages", { durable: true });
-
         console.log('✅ Connected to RabbitMQ and queue is ready.');
-
-        channel.consume("messages", async (msg) => {
-            if (msg !== null) {
-                const jsonData = JSON.parse(msg.content.toString());
-
-                messages.push(jsonData);
-            }
-        }, { noAck: false });
 
     } catch (error) {
         console.error('❌ Error connecting to RabbitMQ:', error);
-        process.exit(1);
     }
 }
 
@@ -42,6 +31,20 @@ async function storeInPostgres(jsonData) {
         const phone_number = jsonData.phone_number || null;
 
         await pool.query(query, [jsonData, phone_number]);
+        console.log('Stored in PostgreSQL:', jsonData);
+    } catch (error) {
+        console.error('Error storing data in PostgreSQL:', error);
+    }
+}
+
+async function storeReplyInPostgres(jsonData) {
+    try {
+        const query = `
+            INSERT INTO replies (reply_data) 
+            VALUES ($1);
+        `;
+
+        await pool.query(query, [jsonData]);
         console.log('Stored in PostgreSQL:', jsonData);
     } catch (error) {
         console.error('Error storing data in PostgreSQL:', error);
@@ -104,7 +107,13 @@ router.post('/replies', async (req, res) => {
 
 router.get('/replies', async (req, res) => {
     try {
-        res.json(messages);
+        const query = `
+            SELECT reply_data FROM replies;
+        `;
+
+        const result = await pool.query(query);
+        console.log("Messages: ", result.rows);
+        res.json(result.rows);
     } catch (error) {
         console.error('Error fetching messages:', error);
         res.status(500).json({ error: 'Internal Server Error' });
@@ -129,6 +138,20 @@ async function consumeMessages() {
                 channel.ack(msg);
             }
         });
+
+        channel.consume("messages", async (msg) => {
+            if (msg !== null) {
+                try {
+                    const replyData = JSON.parse(msg.content.toString());
+                    await storeReplyInPostgres(replyData);
+                    channel.ack(msg);
+                } catch (error) {
+                    console.error('Failed to process reply:', error);
+                    channel.nack(msg, false, true);
+                }
+            }
+        });
+
     } catch (error) {
         console.error('Error consuming messages:', error);
     }
